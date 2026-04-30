@@ -1,117 +1,107 @@
-const CLIENT_ID = "7d53593d"; 
-const API_URL = `https://api.jamendo.com/v3.0/tracks/?client_id=${CLIENT_ID}&format=json&limit=50&include=musicinfo+stats+licenses&audioformat=mp32`;
+const API_URL = "https://api.jamendo.com/v3.0/tracks/?client_id=7d53593d&format=json&limit=20";
 
-let track_list = [];
-let track_index = 0;
+let songs = [];
+let currentIndex = 0;
 let isPlaying = false;
-let updateTimer;
 
-const curr_track = document.createElement("audio");
+const grid = document.getElementById("songGrid");
+const audio = document.getElementById("audio");
+const nowPlaying = document.getElementById("nowPlaying");
+const progress = document.getElementById("progress");
 
-const track_art = document.getElementById("track_art");
-const track_name = document.getElementById("track_name");
-const track_artist = document.getElementById("track_artist");
-const playpause_btn = document.getElementById("playpause");
-const seek_slider = document.getElementById("seek_slider");
-const volume_slider = document.getElementById("volume_slider");
-const curr_time = document.getElementById("current-time");
-const total_duration = document.getElementById("total-duration");
-
-async function loadTracksFromAPI() {
+// Load songs
+async function loadSongs() {
   try {
     const res = await fetch(API_URL);
     const data = await res.json();
 
-    track_list = data.results.map(song => ({
-      name: song.name,
-      artist: song.artist_name,
-      image: song.album_image,
-      path: song.audio
-    }));
-
-    console.log("Loaded songs:", track_list.length);
-
-    loadTrack(0); // Load the first track
+    songs = data.results;
+    renderSongs(songs);
   } catch (err) {
-    console.error("API ERROR:", err);
+    console.error("Error:", err);
   }
 }
 
+// Render UI
+function renderSongs(list) {
+  grid.innerHTML = "";
 
-function loadTrack(index) {
-  clearInterval(updateTimer);
-  resetValues();
+  list.forEach((song, index) => {
+    const card = document.createElement("div");
+    card.className = "card";
 
-  curr_track.src = track_list[index].path;
-  curr_track.load();
+    card.innerHTML = `
+      <img src="${song.album_image}" />
+      <p>${song.name}</p>
+      <small>${song.artist_name}</small>
+    `;
 
-  track_art.src = track_list[index].image;
-  track_name.textContent = track_list[index].name;
-  track_artist.textContent = track_list[index].artist;
+    card.onclick = () => playSong(index);
 
-  updateTimer = setInterval(seekUpdate, 1000);
+    grid.appendChild(card);
+  });
 }
 
+// Play song
+function playSong(index) {
+  currentIndex = index;
+  audio.src = songs[index].audio;
 
-function resetValues() {
-  curr_time.textContent = "00:00";
-  total_duration.textContent = "00:00";
-  seek_slider.value = 0;
-}
+  nowPlaying.textContent =
+    songs[index].name + " - " + songs[index].artist_name;
 
-
-function playpauseTrack() {
-  isPlaying ? pauseTrack() : playTrack();
-}
-
-function playTrack() {
-  curr_track.play();
+  audio.play();
   isPlaying = true;
-  playpause_btn.innerHTML = '<i class="fa fa-pause"></i>';
 }
 
-function pauseTrack() {
-  curr_track.pause();
-  isPlaying = false;
-  playpause_btn.innerHTML = '<i class="fa fa-play"></i>';
-}
+// Play/Pause
+function playPause() {
+  if (!audio.src) return;
 
-
-function nextTrack() {
-  track_index = (track_index + 1) % track_list.length;
-  loadTrack(track_index);
-  playTrack();
-}
-
-function prevTrack() {
-  track_index = (track_index - 1 + track_list.length) % track_list.length;
-  loadTrack(track_index);
-  playTrack();
-}
-
-
-seek_slider.addEventListener("input", () => {
-  curr_track.currentTime = curr_track.duration * (seek_slider.value / 100);
-});
-
-volume_slider.addEventListener("input", () => {
-  curr_track.volume = volume_slider.value / 100;
-});
-
-function seekUpdate() {
-  if (!isNaN(curr_track.duration)) {
-    let pos = curr_track.currentTime * (100 / curr_track.duration);
-    seek_slider.value = pos;
-
-    let cm = Math.floor(curr_track.currentTime / 60);
-    let cs = Math.floor(curr_track.currentTime % 60);
-    let dm = Math.floor(curr_track.duration / 60);
-    let ds = Math.floor(curr_track.duration % 60);
-
-    curr_time.textContent = `${cm}:${cs < 10 ? "0" : ""}${cs}`;
-    total_duration.textContent = `${dm}:${ds < 10 ? "0" : ""}${ds}`;
+  if (isPlaying) {
+    audio.pause();
+  } else {
+    audio.play();
   }
+
+  isPlaying = !isPlaying;
 }
 
+// Next
+function nextTrack() {
+  currentIndex = (currentIndex + 1) % songs.length;
+  playSong(currentIndex);
+}
 
-loadTracksFromAPI();
+// Previous
+function prevTrack() {
+  currentIndex = (currentIndex - 1 + songs.length) % songs.length;
+  playSong(currentIndex);
+}
+
+// Progress update
+audio.addEventListener("timeupdate", () => {
+  progress.value = (audio.currentTime / audio.duration) * 100 || 0;
+});
+
+// Seek
+progress.addEventListener("input", () => {
+  audio.currentTime = (progress.value / 100) * audio.duration;
+});
+
+// Auto next
+audio.addEventListener("ended", nextTrack);
+
+// Search
+document.getElementById("searchBox").addEventListener("input", (e) => {
+  const q = e.target.value.toLowerCase();
+
+  const filtered = songs.filter(s =>
+    s.name.toLowerCase().includes(q) ||
+    s.artist_name.toLowerCase().includes(q)
+  );
+
+  renderSongs(filtered);
+});
+
+loadSongs();
